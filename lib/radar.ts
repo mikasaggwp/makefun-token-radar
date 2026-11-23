@@ -1,112 +1,111 @@
-// Token Radar — model "radar-4".
+// Token Radar — model "radar-4", rewritten from scratch in this session.
 //
-// One sealed DefiLlama snapshot in, one ranked board out. The board ranks
-// EVERY pre-token protocol the snapshot can rank (the whole 40-protocol
-// watchlist plus every rankable pre-token protocol below the $50M floor),
-// never just the biggest ones: the radar exists to find the early ones.
+// What this file does: it takes one sealed DefiLlama snapshot and turns it
+// into a ranked board of pre-token protocols, with an implied launch value
+// for each one. The ranking covers the whole 40-protocol watchlist plus
+// every other pre-token protocol the snapshot can rank, not just the big
+// names — the point of a radar is to surface the early ones.
 //
-// A protocol is pre-token when its record carries no market cap, no
-// CoinGecko id and no symbol. Protocols whose token already trades are kept
-// apart in the Live view at the market's own value, never mixed into the
-// ranked board. Every one of the snapshot's 758 protocols is accounted for
-// in the census (ranked, live, or excluded with a reason).
+// How a protocol ends up on the board:
+//   * Pre-token means its record has no market cap, no CoinGecko id and no
+//     symbol. Anything that already records a token goes to the Live view
+//     at the market's own value and never onto the ranked board.
+//   * Pre-token protocols that are a wrapped / staked / bridged product of
+//     something that already trades, a versioned name, an exchange name, or
+//     in an excluded category (CEX, Bridge, Canonical Bridge, Liquid
+//     Staking, Liquid Restaking, Restaked BTC) are excluded with a reason.
+//   * All 758 protocols in the snapshot are accounted for in the census:
+//     ranked + live + excluded.
 //
-// Implied value is an EXPECTED value, fitted from the snapshot's own
-// traded-token comparables — never a fixed multiple, never a hand-written
-// list of names:
+// How implied value is computed — an expected value, fitted from the
+// snapshot's own traded comparables, never a fixed multiple:
 //
-//   fitted = exp(a_cat + b * ln(TVL)) x growth x chains
-//   odds   = P(token ever lists) from the peers' record, by age bin
-//   implied = fitted x odds
+//   fitted  = exp(a_cat + b * ln(TVL)) * growth * chains
+//   odds    = P(a token ever lists), from the peers' record, by age bin
+//   implied = fitted * odds
 //
-//   a_cat, b   log-log regression of ln(market cap) on ln(TVL) over the
-//              128 live protocols with a positive market cap (16 live
-//              records carry mcap 0 and are left out of the fit). The
-//              slope b is pooled; each category's intercept is its mean
-//              residual, shrunk toward the pooled intercept by n/(n+5),
-//              so a category with 3 comparables barely moves the line
-//              and one with 15 moves it most of the way.
-//   Range guard on the category intercept: a category's intercept is
-//              only used when the category has at least 3 comparables,
-//              and the shift from the pooled intercept is capped at
-//              +/-0.5 in log terms (about 1.65x). Without the guard, one
-//              comparable — Rain, a prediction market with $6.6M of TVL
-//              and a $2.65B market cap, a 400x ratio — tripled the whole
-//              prediction-market category's intercept and put
-//              Polymarket's fitted value at $86.7M. With the guard the
-//              category falls back to the pooled line and Polymarket's
-//              fitted value is $29.2M (implied $19.4M, rank #5 instead
-//              of #1). The guard is not free: it is the best-scoring
-//              intercept variant on the two held-out tests combined
-//              (LOO 1.28, walk-forward 1.16, mean 1.218, against the
-//              unguarded intercept model's 1.32 / 1.16 / 1.238 and the
-//              pooled-only line's 1.22 / 1.23 / 1.225), and it is kept
-//              for the Rain reason, not the score alone: a single
-//              observation must not move a whole category by 3x.
-//   growth     1 + 0.3 x clamp(change_7d, -50, +100) / 100. The snapshot's
-//              own data says growth barely moves the residual (correlation
-//              -0.14), so the weight is small and the model says so.
-//   chains     1 + 0.02 per extra chain, max 1.10.
-//   odds       age-bin share of protocols that record a token, smoothed
-//              toward the overall share (19%) with a 20-protocol
-//              pseudo-count: (live_in_bin + 3.8) / (n_in_bin + 20).
-//              Measured on the snapshot: <1y 8%, 1-2y 12%, 2-4y 22%,
-//              4y+ 28%, age unknown 34% (unknown-age records skew old).
+//   a_cat, b: log-log regression of ln(market cap) on ln(TVL) over the 128
+//     live protocols with a positive market cap (16 live records carry a
+//     zero market cap and are left out of the fit). The slope b is pooled
+//     across all categories; each category's intercept is its mean
+//     residual, shrunk toward the pooled intercept by n/(n+5), so a
+//     category with 3 comparables barely moves the line and one with 15
+//     moves it most of the way.
+//   Range guard: a category intercept is only used when the category has
+//     at least 3 comparables, and the shift from the pooled intercept is
+//     capped at +/-0.5 in log terms (about 1.65x). Why the guard exists:
+//     one comparable — Rain, a prediction market with $6.6M of TVL and a
+//     $2.65B market cap, a 400x ratio — tripled the whole prediction-market
+//     category's intercept and put Polymarket's fitted value at $86.7M.
+//     With the guard the category falls back to the pooled line and
+//     Polymarket's fitted value is $29.2M (implied $19.4M, rank #5
+//     instead of #1). The guard is kept for the Rain reason, not for its
+//     score alone: a single observation must not move a whole category
+//     by 3x. It also happens to be the best-scoring intercept variant on
+//     the two held-out tests combined (LOO 1.28, walk-forward 1.16, mean
+//     1.218, against the unguarded intercept model's 1.32 / 1.16 / 1.238
+//     and the pooled-only line's 1.22 / 1.23 / 1.225).
+//   growth: 1 + 0.3 * clamp(change_7d, -50, +100) / 100. The snapshot's
+//     own data says growth barely moves the residual (correlation -0.14),
+//     so the weight is small and the model says so.
+//   chains: 1 + 0.02 per extra chain, max 1.10.
+//   odds: age-bin share of protocols that record a token, smoothed toward
+//     the overall share (19%) with a 20-protocol pseudo-count:
+//     (live_in_bin + 3.8) / (n_in_bin + 20). Measured on the snapshot:
+//     <1y 8%, 1-2y 12%, 2-4y 22%, 4y+ 28%, age unknown 34% (unknown-age
+//     records skew old).
 //
-// The fit is validated inside the run, on the snapshot itself, and the
-// numbers are printed on the dashboard — they are measured, not claimed.
-// v3 also fits two rival models blind and tests them on the SAME
-// leave-one-out and walk-forward tests, then keeps only the winner:
-//   pooled     the model above (the one that scores the board).
-//   per-cat    one log-log line per category, slope and intercept fitted
-//              per category and shrunk toward the pooled line
-//              (n/(n+8) on the slope, n/(n+5) on the intercept).
-//   quadratic  ln(mcap) = a + b*ln(TVL) + c*ln(TVL)^2, one pooled curve.
+// Validation is done inside the run, on the snapshot itself, and the
+// numbers are printed on the dashboard — measured, not claimed. Two rival
+// models are also fitted blind and tested on the SAME leave-one-out and
+// walk-forward tests, then only the winner scores the board:
+//   pooled:   the model above (the one that scores the board).
+//   per-cat:  one log-log line per category, slope and intercept fitted per
+//             category and shrunk toward the pooled line (n/(n+8) on the
+//             slope, n/(n+5) on the intercept).
+//   quadratic: ln(mcap) = a + b*ln(TVL) + c*ln(TVL)^2, one pooled curve.
 // Measured on this snapshot (median abs log error, lower is better):
-//   pooled     LOO 1.22, walk-forward 1.23
-//   per-cat    LOO 1.65, walk-forward 1.16 — wins walk-forward, loses
-//              leave-one-out badly: with 1-15 comparables per category
-//              the per-category slopes are mostly noise.
-//   quadratic  LOO 1.22, walk-forward 1.04 at the 70/30 split — but it
-//              only edges the pooled line's LOO median by 0.5% (1.2167
-//              vs 1.2234), its LOO mean error is slightly worse (1.61 vs
-//              1.60), and its walk-forward gain flips sign across splits
-//              (60/40: 1.08 vs 1.06, worse; 80/20: 1.59 vs 1.61): no
-//              robust win.
+//   pooled    LOO 1.22, walk-forward 1.23
+//   per-cat   LOO 1.65, walk-forward 1.16 — wins walk-forward, loses
+//             leave-one-out badly: with 1-15 comparables per category the
+//             per-category slopes are mostly noise.
+//   quadratic LOO 1.22, walk-forward 1.04 at the 70/30 split — but it only
+//             edges the pooled line's LOO median by 0.5% (1.2167 vs
+//             1.2234), its LOO mean error is slightly worse (1.61 vs 1.60),
+//             and its walk-forward gain flips sign across splits (60/40:
+//             1.08 vs 1.06, worse; 80/20: 1.59 vs 1.61): no robust win.
 // Neither rival beats the pooled line on leave-one-out by any robust
-// margin, so the pooled line scores the board and the rivals are
-// reported, not hidden. The dashboard's proof strip prints all three
-// models' numbers.
+// margin, so the pooled line scores the board and the rivals are reported,
+// not hidden. The dashboard's proof strip prints all three models' numbers.
 //
-// Uncertainty: every row's fitted value carries a bootstrap band.
-// The 128 comparables are resampled with replacement (200 resamples,
-// seeded, so the run is deterministic), the line is refit each time,
-// and the band is the P10-P90 of the row's fitted value across the
-// resamples. A wide band means the comparables do not pin the value
-// down; the board still ranks on the point estimate, and the band is
-// shown next to it so the reader can see how much to trust it.
+// Uncertainty: every row's fitted value carries a bootstrap band. The 128
+// comparables are resampled with replacement (200 resamples, seeded, so
+// the run is deterministic), the line is refit each time, and the band is
+// the P10-P90 of the row's fitted value across the resamples. A wide band
+// means the comparables do not pin the value down; the board still ranks
+// on the point estimate, and the band is shown next to it so the reader
+// can see how much to trust it.
 //
 // Farm economics: every plan is costed in dollars per hour, at three
-// deposit sizes, because a $100 farmer and a $10,000 farmer face the
-// same protocol very differently. Gas per transaction is an estimate by
-// chain (Ethereum $6, Arbitrum $0.30, Base $0.10, Solana $0.05, BNB
-// $0.30, Polygon $0.10, Avalanche $0.50, Optimism $0.20, anything else
-// $1.00); a plan is 11 transactions over 8 weeks and about 3 hours of
-// the farmer's time. Expected farmer value at deposit D assumes an
-// airdrop pool of 5% of the launch value and farmers collectively
-// deploying 10% of the protocol's TVL, so the farmer's share of the
-// pool is D / (10% of TVL):
-//   expected(D) = implied x 0.05 x D / (0.10 x TVL)
-//   net $/hr(D) = (expected(D) - gas - opportunity cost) / 3 hours
-//   opportunity cost = D x 5% a year x 8/52 (the yield the deposit
-//   would earn elsewhere while it sits in the position).
-// The headline verdict is judged at a $1,000 deposit: FARM if net
-// $/hr >= $20, THIN if >= $5, else SKIP. $20 an hour is a skilled
-// hourly wage; $5 is a floor below which the time is worth more
-// elsewhere. All three deposit scenarios are shown in the detail view,
-// so a reader with $100 or $10,000 can see their own numbers instead
-// of the headline. Every assumption is stated on the page; none of
-// this is a payout promise.
+// deposit sizes, because a $100 farmer and a $10,000 farmer face the same
+// protocol very differently. Gas per transaction is an estimate by chain
+// (Ethereum $6, Arbitrum $0.30, Base $0.10, Solana $0.05, BNB $0.30,
+// Polygon $0.10, Avalanche $0.50, Optimism $0.20, anything else $1.00);
+// a plan is 11 transactions over 8 weeks and about 3 hours of the
+// farmer's time. Expected farmer value at deposit D assumes an airdrop
+// pool of 5% of the launch value and farmers collectively deploying 10%
+// of the protocol's TVL, so the farmer's share of the pool is
+// D / (10% of TVL):
+//   expected(D)      = implied * 0.05 * D / (0.10 * TVL)
+//   net $/hr(D)      = (expected(D) - gas - opportunity cost) / 3 hours
+//   opportunity cost = D * 5% a year * 8/52 (the yield the deposit would
+//                      earn elsewhere while it sits in the position).
+// The headline verdict is judged at a $1,000 deposit: FARM if net $/hr
+// >= $20, THIN if >= $5, else SKIP. $20 an hour is a skilled hourly wage;
+// $5 is a floor below which the time is worth more elsewhere. All three
+// deposit scenarios are shown in the detail view, so a reader with $100
+// or $10,000 can see their own numbers instead of the headline. Every
+// assumption is stated on the page; none of this is a payout promise.
 
 export interface SnapshotProtocol {
   slug: string;
@@ -156,6 +155,13 @@ const GAS_PER_TX: Record<string, number> = {
   polygon: 0.1, avalanche: 0.5, optimism: 0.2, arbitrumone: 0.3,
 };
 const DEFAULT_GAS = 1;
+
+// Range-guard tuning: a category needs this many comparables before its
+// own intercept is trusted, and no intercept may shift the pooled line by
+// more than this many log points.
+const GUARD_MIN_COMPARABLES = 3;
+const GUARD_MAX_LOG_SHIFT = 0.5;
+const INTERCEPT_SHRINK = 5;
 
 export interface Validation {
   loo_n: number;
@@ -322,12 +328,18 @@ export class SnapshotError extends Error {
   }
 }
 
+// --- Small numeric helpers ---
+
 const DAY_MS = 86_400_000;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 
 function finite(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
 }
 
 function median(values: number[]): number {
@@ -344,6 +356,20 @@ function quantile(sortedAsc: number[], q: number): number {
   const hi = Math.ceil(i);
   return sortedAsc[lo]! + (sortedAsc[hi]! - sortedAsc[lo]!) * (i - lo);
 }
+
+// Seeded RNG (mulberry32) so bootstrap resamples are identical on every run.
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// --- Snapshot classification ---
 
 export function ageDays(asOf: string, listedAt: string | null): number | null {
   if (listedAt === null) return null;
@@ -374,6 +400,10 @@ export function exclusionReason(p: SnapshotProtocol): string | null {
 export function isRankable(p: SnapshotProtocol): boolean {
   return exclusionReason(p) === null;
 }
+
+const catKey = (p: SnapshotProtocol): string => (p.category ?? 'Uncategorised').toLowerCase();
+
+// --- Fitting: ordinary least squares ---
 
 interface Fit { intercept: number; slope: number; }
 
@@ -423,9 +453,16 @@ function olsMulti(X: number[][], y: number[]): number[] {
   return beta;
 }
 
-const catKey = (p: SnapshotProtocol): string => (p.category ?? 'Uncategorised').toLowerCase();
-
 interface PooledFit { pooled: Fit; categoryIntercept: Map<string, number>; }
+
+// Shrink a category's mean residual toward zero and cap the shift, so one
+// loud comparable cannot drag a whole category's line with it.
+function guardedShift(residuals: number[]): number | null {
+  if (residuals.length < GUARD_MIN_COMPARABLES) return null;
+  const mean = residuals.reduce((a, v) => a + v, 0) / residuals.length;
+  const shrunk = mean * (residuals.length / (residuals.length + INTERCEPT_SHRINK));
+  return clamp(shrunk, -GUARD_MAX_LOG_SHIFT, GUARD_MAX_LOG_SHIFT);
+}
 
 function fitPooled(live: SnapshotProtocol[]): PooledFit {
   const pooled = ols(live.map((p) => Math.log(p.tvl_usd)), live.map((p) => Math.log(p.mcap_usd!)));
@@ -439,12 +476,8 @@ function fitPooled(live: SnapshotProtocol[]): PooledFit {
   }
   const categoryIntercept = new Map<string, number>();
   for (const [key, resids] of byCat) {
-    // Range guard: a category with fewer than 3 comparables carries no
-    // intercept of its own (one observation must not move a category),
-    // and any shift is capped at +/-0.5 log (about 1.65x).
-    if (resids.length < 3) continue;
-    const mean = resids.reduce((a, v) => a + v, 0) / resids.length;
-    const shift = Math.max(-0.5, Math.min(0.5, mean * (resids.length / (resids.length + 5))));
+    const shift = guardedShift(resids);
+    if (shift === null) continue;
     categoryIntercept.set(key, pooled.intercept + shift);
   }
   return { pooled, categoryIntercept };
@@ -503,6 +536,8 @@ export function tokenOdds(model: FittedModel, age: number | null): number {
   return (live + prior * 20) / (total + 20);
 }
 
+// --- Value and farm economics ---
+
 export function gasPerTx(p: SnapshotProtocol): number {
   for (const c of p.chains) {
     const key = c.toLowerCase().replace(/[^a-z]/g, '');
@@ -516,7 +551,7 @@ export function fittedValue(model: FittedModel, p: SnapshotProtocol): {
 } {
   const key = catKey(p);
   const intercept = model.categoryIntercept.get(key) ?? model.pooled.intercept;
-  const growthPct = Math.min(GROWTH_CAP, Math.max(GROWTH_FLOOR, finite(p.change_7d, 0)));
+  const growthPct = clamp(finite(p.change_7d, 0), GROWTH_FLOOR, GROWTH_CAP);
   const growthMult = 1 + (growthPct / 100) * GROWTH_WEIGHT;
   const chainMult = Math.min(CHAIN_CAP, 1 + CHAIN_BONUS * Math.max(p.chains.length - 1, 0));
   const fitted = Math.max(1, Math.exp(intercept + model.pooled.slope * Math.log(Math.max(1, p.tvl_usd))) * growthMult * chainMult);
@@ -536,19 +571,22 @@ export function verdictFor(netPerHour: number): 'FARM' | 'THIN' | 'SKIP' {
   return netPerHour >= VERDICT_FARM ? 'FARM' : netPerHour >= VERDICT_THIN ? 'THIN' : 'SKIP';
 }
 
+// Break-even launch odds: the token odds at which this deposit's expected
+// value exactly covers its gas + opportunity cost.
+// expected = fitted x odds x 0.05 x D / (0.10 x TVL), so
+// odds* = (gas + opp) x 0.10 x TVL / (fitted x 0.05 x D).
+// Above 1 (100%) the deposit can never break even at any odds.
+function breakevenOdds(fitted: number, tvl: number, deposit: number, gasTotal: number, opp: number): number {
+  if (fitted <= 0 || tvl <= 0) return 999;
+  return round4(((gasTotal + opp) * FARMING_CAPITAL_SHARE * tvl) / (fitted * AIRDROP_POOL_SHARE * deposit));
+}
+
 export function depositScenarios(implied: number, fitted: number, tvl: number, gasTotal: number): DepositScenario[] {
   return DEPOSITS.map((deposit) => {
     const expected = round2(expectedForDeposit(implied, tvl, deposit));
     const opp = round2(opportunityCost(deposit));
     const net = round2((expected - gasTotal - opp) / FARM_HOURS);
-    // Break-even launch odds: the token odds at which this deposit's
-    // expected value exactly covers its gas + opportunity cost.
-    // expected = fitted x odds x 0.05 x D / (0.10 x TVL), so
-    // odds* = (gas + opp) x 0.10 x TVL / (fitted x 0.05 x D).
-    // Above 1 (100%) the deposit can never break even at any odds.
-    const breakeven = fitted > 0 && tvl > 0
-      ? round4(((gasTotal + opp) * FARMING_CAPITAL_SHARE * tvl) / (fitted * AIRDROP_POOL_SHARE * deposit))
-      : 999;
+    const breakeven = breakevenOdds(fitted, tvl, deposit, gasTotal, opp);
     return { deposit_usd: deposit, expected_value_usd: expected, opportunity_cost_usd: opp, net_per_hour_usd: net, verdict: verdictFor(net), breakeven_odds: breakeven };
   });
 }
@@ -596,8 +634,18 @@ export interface RivalValidation {
   quad_walk_median_abs_log_err: number;
 }
 
+function liveComparables(snapshot: Snapshot): SnapshotProtocol[] {
+  return snapshot.protocols.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0);
+}
+
+function datedComparables(live: SnapshotProtocol[]): { train: SnapshotProtocol[]; test: SnapshotProtocol[] } {
+  const dated = live.filter((p) => p.listed_at !== null).sort((a, b) => (a.listed_at! < b.listed_at! ? -1 : 1));
+  const cut = Math.floor(dated.length * 0.7);
+  return { train: dated.slice(0, cut), test: dated.slice(cut) };
+}
+
 export function validateRivals(snapshot: Snapshot): RivalValidation {
-  const live = snapshot.protocols.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0);
+  const live = liveComparables(snapshot);
   const looPer: number[] = [];
   const looQuad: number[] = [];
   for (let i = 0; i < live.length; i++) {
@@ -608,10 +656,7 @@ export function validateRivals(snapshot: Snapshot): RivalValidation {
     const beta = olsMulti(rest.map((q) => { const x = Math.log(q.tvl_usd); return [1, x, x * x]; }), rest.map((q) => Math.log(q.mcap_usd!)));
     looQuad.push(Math.abs(Math.log(p.mcap_usd!) - quadPredict(beta, p)));
   }
-  const dated = live.filter((p) => p.listed_at !== null).sort((a, b) => (a.listed_at! < b.listed_at! ? -1 : 1));
-  const cut = Math.floor(dated.length * 0.7);
-  const train = dated.slice(0, cut);
-  const test = dated.slice(cut);
+  const { train, test } = datedComparables(live);
   const pcTrain = fitPerCat(train);
   const walkPer = test.map((p) => Math.abs(Math.log(p.mcap_usd!) - perCatPredict(pcTrain, p)));
   const betaTrain = olsMulti(train.map((q) => { const x = Math.log(q.tvl_usd); return [1, x, x * x]; }), train.map((q) => Math.log(q.mcap_usd!)));
@@ -625,7 +670,7 @@ export function validateRivals(snapshot: Snapshot): RivalValidation {
 }
 
 export function validateGuard(snapshot: Snapshot): { loo: number; walk: number } {
-  const live = snapshot.protocols.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0);
+  const live = liveComparables(snapshot);
   const looErrs: number[] = [];
   for (let i = 0; i < live.length; i++) {
     const rest = live.filter((_, j) => j !== i);
@@ -634,10 +679,7 @@ export function validateGuard(snapshot: Snapshot): { loo: number; walk: number }
     const inter = fit.categoryIntercept.get(catKey(p)) ?? fit.pooled.intercept;
     looErrs.push(Math.abs(Math.log(p.mcap_usd!) - (inter + fit.pooled.slope * Math.log(p.tvl_usd))));
   }
-  const dated = live.filter((p) => p.listed_at !== null).sort((a, b) => (a.listed_at! < b.listed_at! ? -1 : 1));
-  const cut = Math.floor(dated.length * 0.7);
-  const train = dated.slice(0, cut);
-  const test = dated.slice(cut);
+  const { train, test } = datedComparables(live);
   const fit = fitPooled(train);
   const walkErrs = test.map((p) => {
     const inter = fit.categoryIntercept.get(catKey(p)) ?? fit.pooled.intercept;
@@ -647,7 +689,7 @@ export function validateGuard(snapshot: Snapshot): { loo: number; walk: number }
 }
 
 export function validateModel(snapshot: Snapshot): Validation {
-  const live = snapshot.protocols.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0);
+  const live = liveComparables(snapshot);
   const flatRatio = median(live.map((p) => p.mcap_usd! / p.tvl_usd));
   const looErrs: number[] = [];
   const looFlat: number[] = [];
@@ -660,10 +702,7 @@ export function validateModel(snapshot: Snapshot): Validation {
   }
   const looMed = median(looErrs);
   const looFlatMed = median(looFlat);
-  const dated = live.filter((p) => p.listed_at !== null).sort((a, b) => (a.listed_at! < b.listed_at! ? -1 : 1));
-  const cut = Math.floor(dated.length * 0.7);
-  const train = dated.slice(0, cut);
-  const test = dated.slice(cut);
+  const { train, test } = datedComparables(live);
   const wfit = ols(train.map((p) => Math.log(p.tvl_usd)), train.map((p) => Math.log(p.mcap_usd!)));
   const trainFlat = median(train.map((p) => p.mcap_usd! / p.tvl_usd));
   const walkErrs = test.map((p) => Math.abs(Math.log(p.mcap_usd!) - (wfit.intercept + wfit.slope * Math.log(p.tvl_usd))));
@@ -698,17 +737,7 @@ export function validateModel(snapshot: Snapshot): Validation {
   };
 }
 
-// Seeded RNG (mulberry32) so bootstrap resamples are identical on every run.
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// --- Farm plans ---
 
 interface ScoredRow {
   p: SnapshotProtocol;
@@ -784,6 +813,8 @@ export function farmPlan(p: SnapshotProtocol, age: number | null, gasTotal: numb
   ].map(stepText);
 }
 
+// --- Board building ---
+
 export function buildBoard(snapshot: Snapshot): { board: BoardRow[]; model: FittedModel; validation: Validation; census: Census } {
   const model = fitModel(snapshot);
   const validation = validateModel(snapshot);
@@ -830,7 +861,7 @@ export function buildBoard(snapshot: Snapshot): { board: BoardRow[]; model: Fitt
   // time, and take the P10-P90 of each row's fitted value AND of its rank
   // among the 198 rows. Odds are held fixed. A row whose rank range is
   // wide (say #40-#120) is not really a #40 row — the band says so.
-  const live = snapshot.protocols.filter((p) => p.mcap_usd !== null && p.mcap_usd > 0 && p.tvl_usd > 0);
+  const live = liveComparables(snapshot);
   const rand = mulberry32(BOOTSTRAP_SEED);
   const bootFits: number[][] = scored.map(() => []);
   const bootRanks: number[][] = scored.map(() => []);
@@ -848,19 +879,38 @@ export function buildBoard(snapshot: Snapshot): { board: BoardRow[]; model: Fitt
       bootRanks[idx]!.push(rankOf[idx]!);
     });
   }
-  const relWidths: number[] = [];
-  const rankWidths: number[] = [];
-  const bands = scored.map((s, idx) => {
+  // One row's band, from its 200 resampled fitted values and ranks:
+  // P10-P90 of the fitted value (and of the implied value, which is the
+  // fitted band scaled by the row's fixed token odds) plus the P10-P90
+  // rank range. The median widths across all rows are reported as the
+  // run's bootstrap summary.
+  const bandFor = (idx: number): { fittedLo: number; fittedHi: number; impliedLo: number; impliedHi: number; rankLo: number; rankHi: number } => {
     const sorted = [...bootFits[idx]!].sort((a, b) => a - b);
     const lo = Math.max(1, Math.round(quantile(sorted, 0.1)));
     const hi = Math.max(1, Math.round(quantile(sorted, 0.9)));
     const medFit = quantile(sorted, 0.5);
-    relWidths.push(medFit > 0 ? (hi - lo) / medFit : 0);
     const sortedRanks = [...bootRanks[idx]!].sort((a, b) => a - b);
     const rankLo = Math.round(quantile(sortedRanks, 0.1));
     const rankHi = Math.round(quantile(sortedRanks, 0.9));
-    rankWidths.push(rankHi - rankLo);
-    return { fittedLo: lo, fittedHi: hi, impliedLo: Math.max(1, Math.round(lo * s.odds)), impliedHi: Math.max(1, Math.round(hi * s.odds)), rankLo, rankHi };
+    const odds = scored[idx]!.odds;
+    return {
+      fittedLo: lo,
+      fittedHi: hi,
+      impliedLo: Math.max(1, Math.round(lo * odds)),
+      impliedHi: Math.max(1, Math.round(hi * odds)),
+      rankLo,
+      rankHi,
+    };
+  };
+  const relWidths: number[] = [];
+  const rankWidths: number[] = [];
+  const bands = scored.map((s, idx) => {
+    const band = bandFor(idx);
+    const sorted = [...bootFits[idx]!].sort((a, b) => a - b);
+    const medFit = quantile(sorted, 0.5);
+    relWidths.push(medFit > 0 ? (band.fittedHi - band.fittedLo) / medFit : 0);
+    rankWidths.push(band.rankHi - band.rankLo);
+    return band;
   });
   validation.bootstrap_median_rel_width = round4(median(relWidths));
   validation.bootstrap_median_rank_width = round2(median(rankWidths));
@@ -1001,6 +1051,8 @@ export function buildRadar(snapshot: Snapshot): { board: BoardRow[]; radar: Rada
   };
   return { board, radar };
 }
+
+// --- Snapshot parsing and board checks ---
 
 export function parseSnapshot(text: string): Snapshot {
   let raw: unknown;
