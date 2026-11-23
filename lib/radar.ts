@@ -342,9 +342,15 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
+// A sorted copy of a list of numbers, leaving the input untouched — the
+// one place that sorts, so every median / quantile caller sorts the same way.
+function sortedCopy(values: number[]): number[] {
+  return [...values].sort((a, b) => a - b);
+}
+
 function median(values: number[]): number {
   if (values.length === 0) return 0;
-  const s = [...values].sort((a, b) => a - b);
+  const s = sortedCopy(values);
   const m = Math.floor(s.length / 2);
   return s.length % 2 === 1 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
