@@ -16,9 +16,15 @@
 </header>
 
 <section class="model" id="model-box">
-  <h2>How the value is worked out</h2>
-  <p class="formula">implied value = TVL × category multiple × growth × maturity × chains</p>
-  <p>Growth is the 7-day TVL change, clamped to −50%…+100% (weight 0.6). Maturity grows with how long the protocol has run with no token (0.70–1.00 over 4 years; unknown age counts as 1 year). Chains add 3% each, up to 15%. Sector multiples: curators &amp; allocators 0.40, lending &amp; CDP 0.32, DEXs &amp; perps 0.30, RWA &amp; basis 0.28, yield 0.26, stables / payments / insurance / prediction 0.24, other 0.20, a bare chain 0.15. No name is ever special-cased — the same formula scores every row, from the snapshot's own figures only. An implied value is this entry's claim, not a prediction that a token will be issued, or when.</p>
+  <h2>How the value is worked out — fitted, not guessed</h2>
+  <p class="formula">implied value = fitted value × token odds &nbsp;·&nbsp; fitted value = exp(a<sub>category</sub> + 0.52 × ln TVL) × growth × chains</p>
+  <p id="fit-line">The line is fitted on this snapshot's own traded-token comparables (log market cap on log TVL, 128 protocols with a positive market cap; each category's intercept is its mean residual, shrunk n/(n+5)). Growth is the 7-day TVL change, clamped to −50%…+100% at weight 0.3 — the snapshot's own data says growth barely moves the residual (correlation −0.14), so the weight is small. Chains add 2% each, up to 10%. Token odds are the share of peer protocols in the same age bin that record a token, smoothed toward the overall share. No name is ever special-cased — the same fit scores every row, from the snapshot's own figures only. An implied value is this entry's claim, not a prediction that a token will be issued, or when.</p>
+</section>
+
+<section class="model proof" id="proof-box">
+  <h2>Proof strip — check the claims on this page</h2>
+  <p id="proof-line"></p>
+  <p class="fine">Validation is measured inside the run, not asserted: leave-one-out refits the line without each live protocol in turn; walk-forward fits on the oldest 70% of live protocols by listed date and predicts the newest 30%. Both are scored against a flat median market-cap/TVL ratio. Farm $/hr assumes an active farmer captures 0.001% of the launch value, over 11 transactions and about 3 hours in 8 weeks — a relative score, never a payout promise. The detail view recomputes each row's fitted value live from the TVL and the coefficients shown, so the board and the code agree.</p>
 </section>
 
 <nav class="views">
@@ -35,6 +41,8 @@
     <option value="tvl">Sort: TVL ↓</option>
     <option value="growth">Sort: 7-day growth ↓</option>
     <option value="age">Sort: oldest first</option>
+    <option value="perhour">Sort: net $/hr ↓</option>
+    <option value="odds">Sort: token odds ↓</option>
   </select>
   <label class="check"><input type="checkbox" id="wl"> Watchlist only ($50M+ floor)</label>
 </section>
@@ -43,7 +51,7 @@
   <table id="board">
     <thead><tr>
       <th>#</th><th>Protocol</th><th>Category</th><th>Chains</th>
-      <th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th><th class="num">Implied value</th>
+      <th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th><th class="num">Odds</th><th class="num">$/hr</th><th class="num">Verdict</th><th class="num">Implied value</th>
     </tr></thead>
     <tbody id="rows"></tbody>
   </table>

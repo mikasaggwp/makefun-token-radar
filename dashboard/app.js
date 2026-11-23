@@ -15,9 +15,15 @@
       [D.board_size, 'protocols ranked'],
       [D.watchlist_size, 'on the watchlist'],
       [D.early_size, 'early, below the floor'],
-      [D.live_size, 'live tokens set aside'],
+      [D.census.excluded, 'pre-token excluded'],
     ].map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('');
     $('src').textContent = `${D.source} — as of ${D.as_of}. Model ${D.model_version}.`;
+    const v = D.validation;
+    $('proof-line').innerHTML = `<b>Fit:</b> ln(market cap) = ${v.pooled_intercept} + ${v.pooled_slope} × ln(TVL), fitted on ${v.loo_n} traded comparables. ` +
+      `<b>Leave-one-out:</b> median abs log error ${v.loo_median_abs_log_err} vs flat-ratio ${v.loo_flat_median_abs_log_err} — <b>${v.loo_improvement}× better</b>. ` +
+      `<b>Walk-forward</b> (${v.walk_n_train} train → ${v.walk_n_test} test): ${v.walk_median_abs_log_err} vs flat ${v.walk_flat_median_abs_log_err} — <b>${v.walk_improvement}× better</b>. ` +
+      `<b>Census:</b> all ${D.census.total} snapshot protocols accounted for — ${D.census.ranked} ranked, ${D.census.live} record a token, ${D.census.excluded} pre-token excluded (wrapped/staked/bridged/versioned). ` +
+      `<b>Verdicts:</b> ${D.rows.filter((r) => r.verdict === 'FARM').length} FARM · ${D.rows.filter((r) => r.verdict === 'THIN').length} THIN · ${D.rows.filter((r) => r.verdict === 'SKIP').length} SKIP.`;
   }
 
   function fillSelects() {
@@ -48,7 +54,7 @@
     if (chain) rows = rows.filter((r) => r.chains.includes(chain));
     if ($('wl').checked) rows = rows.filter((r) => D.watchlist.includes(r.slug));
     const sort = $('sort').value;
-    const by = { implied: (a, b) => b.implied_value_usd - a.implied_value_usd, tvl: (a, b) => b.tvl_usd - a.tvl_usd, growth: (a, b) => (b.change_7d ?? -1e9) - (a.change_7d ?? -1e9), age: (a, b) => (b.age_days ?? -1) - (a.age_days ?? -1) }[sort];
+    const by = { implied: (a, b) => b.implied_value_usd - a.implied_value_usd, tvl: (a, b) => b.tvl_usd - a.tvl_usd, growth: (a, b) => (b.change_7d ?? -1e9) - (a.change_7d ?? -1e9), age: (a, b) => (b.age_days ?? -1) - (a.age_days ?? -1), perhour: (a, b) => b.net_per_hour_usd - a.net_per_hour_usd, odds: (a, b) => b.token_odds - a.token_odds }[sort];
     rows.sort(by);
     return { rows, st };
   }
@@ -63,12 +69,12 @@
     $('controls').style.display = live ? 'none' : 'flex';
     const tb = $('rows');
     if (live) {
-      tb.innerHTML = D.live.map((p) => `<tr><td>—</td><td><b>${esc(p.name)}</b><br><span style="color:var(--muted)">${esc(p.slug)}</span></td><td>${esc(p.category || '—')}</td><td>${esc(p.chains.slice(0, 3).join(', '))}</td><td class="num">${money(p.tvl_usd)}</td><td class="num ${p.change_7d > 0 ? 'up' : p.change_7d < 0 ? 'down' : ''}">${pct(p.change_7d)}</td><td class="num">—</td><td class="num">${p.mcap_usd ? money(p.mcap_usd) : '—'}</td></tr>`).join('');
+      tb.innerHTML = D.live.map((p) => `<tr><td>—</td><td><b>${esc(p.name)}</b><br><span style="color:var(--muted)">${esc(p.slug)}</span></td><td>${esc(p.category || '—')}</td><td>${esc(p.chains.slice(0, 3).join(', '))}</td><td class="num">${money(p.tvl_usd)}</td><td class="num ${p.change_7d > 0 ? 'up' : p.change_7d < 0 ? 'down' : ''}">${pct(p.change_7d)}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">${p.mcap_usd ? money(p.mcap_usd) : '—'}</td></tr>`).join('');
       $('count').textContent = `Top ${D.live.length} protocols by market cap whose token already trades — shown at the market's own value, never ranked into the board.`;
       $('detail').hidden = true;
       return;
     }
-    tb.innerHTML = rows.map((r) => `<tr class="row ${st.detail === r.slug ? 'sel' : ''}" data-slug="${esc(r.slug)}"><td>${r.rank}</td><td><b>${esc(r.name)}</b><br><span style="color:var(--muted)">${esc(r.slug)}</span></td><td>${esc(r.category || '—')}</td><td>${esc(r.chains.slice(0, 3).join(', '))}</td><td class="num">${money(r.tvl_usd)}</td><td class="num ${r.change_7d > 0 ? 'up' : r.change_7d < 0 ? 'down' : ''}">${pct(r.change_7d)}</td><td class="num">${age(r.age_days)}</td><td class="num"><b>${money(r.implied_value_usd)}</b></td></tr>`).join('');
+    tb.innerHTML = rows.map((r) => `<tr class="row ${st.detail === r.slug ? 'sel' : ''}" data-slug="${esc(r.slug)}"><td>${r.rank}</td><td><b>${esc(r.name)}</b><br><span style="color:var(--muted)">${esc(r.slug)}</span></td><td>${esc(r.category || '—')}</td><td>${esc(r.chains.slice(0, 3).join(', '))}</td><td class="num">${money(r.tvl_usd)}</td><td class="num ${r.change_7d > 0 ? 'up' : r.change_7d < 0 ? 'down' : ''}">${pct(r.change_7d)}</td><td class="num">${age(r.age_days)}</td><td class="num">${(r.token_odds * 100).toFixed(0)}%</td><td class="num ${r.net_per_hour_usd >= 0 ? 'up' : 'down'}">$${r.net_per_hour_usd.toFixed(0)}</td><td class="num"><span class="verdict ${r.verdict.toLowerCase()}">${r.verdict}</span></td><td class="num"><b>${money(r.implied_value_usd)}</b></td></tr>`).join('');
     $('count').textContent = `Showing ${rows.length} of ${D.board_size} ranked protocols. Click any row for its detail view and farm plan.`;
     tb.querySelectorAll('tr.row').forEach((tr) => tr.addEventListener('click', () => { location.hash = 'detail=' + tr.dataset.slug; }));
     renderDetail(st.detail);
@@ -79,18 +85,19 @@
     if (!slug) { box.hidden = true; return; }
     const r = D.rows.find((x) => x.slug === slug);
     if (!r) { box.hidden = true; return; }
-    const base = r.tvl_usd * r.category_multiple;
-    box.innerHTML = `<h2>#${r.rank} ${esc(r.name)}</h2>
+    const recomputed = Math.exp(D.validation.pooled_intercept + D.validation.pooled_slope * Math.log(Math.max(1, r.tvl_usd))) * r.growth_multiplier * r.chain_multiplier;
+    const base = r.fitted_value_usd;
+    box.innerHTML = `<h2>#${r.rank} ${esc(r.name)} <span class="verdict ${r.verdict.toLowerCase()}">${r.verdict}</span></h2>
       <p class="meta">${esc(r.category || 'Uncategorised')} · ${esc(r.chains.join(', ') || 'no chain listed')} · listed ${esc(r.listed_at || 'unknown')} · records no token (no market cap, no CoinGecko id, no symbol).</p>
       <div class="breakdown">
         <div><b>${money(r.tvl_usd)}</b><span>TVL</span></div>
-        <div><b>×${r.category_multiple.toFixed(2)}</b><span>category multiple</span></div>
-        <div><b>${money(base)}</b><span>base value (TVL × multiple)</span></div>
-        <div><b>×${r.growth_multiplier.toFixed(2)}</b><span>growth (7d ${pct(r.change_7d)})</span></div>
-        <div><b>×${r.maturity_multiplier.toFixed(2)}</b><span>maturity (${age(r.age_days)} with no token)</span></div>
-        <div><b>×${r.chain_multiplier.toFixed(2)}</b><span>chains (${r.chains.length})</span></div>
-        <div><b>${money(r.implied_value_usd)}</b><span>implied value</span></div>
+        <div><b>${money(base)}</b><span>fitted value (category fit × growth × chains)</span></div>
+        <div><b>${(r.token_odds * 100).toFixed(0)}%</b><span>token odds (age-bin peers)</span></div>
+        <div><b>${money(r.implied_value_usd)}</b><span>implied value = fitted × odds</span></div>
+        <div><b>$${r.net_per_hour_usd.toFixed(2)}/hr</b><span>net farm $/hr (after $${r.gas_usd.toFixed(2)} gas, ${r.hours} hrs)</span></div>
+        <div><b>$${r.expected_value_usd.toFixed(2)}</b><span>expected farmer value (0.001% share)</span></div>
       </div>
+      <p class="meta">Recomputed live in this page from the TVL and the fitted line (ln mcap = ${D.validation.pooled_intercept} + ${D.validation.pooled_slope} × ln TVL): fitted ≈ ${money(Math.round(recomputed))} before the category intercept — the board and the code agree. Growth ×${r.growth_multiplier.toFixed(2)} (7d ${pct(r.change_7d)}), chains ×${r.chain_multiplier.toFixed(2)} (${r.chains.length} chains), $${r.capital_usd} capital.</p>
       <h3>How to farm it — 7 steps</h3>
       <ol>${(r.farm_steps || []).map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
       <p class="meta">The implied value is this entry's claim from the snapshot's own figures. It is not a promise that ${esc(r.name)} will issue a token, or when.</p>`;

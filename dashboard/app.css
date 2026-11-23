@@ -40,5 +40,12 @@ tr.row.sel td{background:#1f2c44}
 .detail ol{margin:0;padding-left:20px}
 .detail li{margin:7px 0}
 .detail li b{color:var(--gold)}
+.proof{border-left-color:var(--green)}
+.proof p{color:var(--text)}
+.fine{color:var(--muted)!important;font-size:12.5px!important}
+.verdict{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:700}
+.verdict.farm{background:#1a3d1e;color:#3fb950}
+.verdict.thin{background:#3d2f10;color:#d29922}
+.verdict.skip{background:#3d1a1a;color:#f85149}
 footer{padding:0 32px 28px;color:var(--muted);font-size:12.5px}
 @media(max-width:760px){.top,.model,.views,.controls,main,footer{margin-left:12px;margin-right:12px;padding-left:12px;padding-right:12px}th:nth-child(4),td:nth-child(4){display:none}}
