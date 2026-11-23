@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar — pre-token protocols, ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Token Radar</h1>
+    <p class="sub">Every protocol DefiLlama tracks that <b>records no token yet</b>, ranked by what its launch would be worth.</p>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<section class="model" id="model-box">
+  <h2>How the value is worked out</h2>
+  <p class="formula">implied value = TVL × category multiple × growth × maturity × chains</p>
+  <p>Growth is the 7-day TVL change, clamped to −50%…+100% (weight 0.6). Maturity grows with how long the protocol has run with no token (0.70–1.00 over 4 years; unknown age counts as 1 year). Chains add 3% each, up to 15%. Sector multiples: curators &amp; allocators 0.40, lending &amp; CDP 0.32, DEXs &amp; perps 0.30, RWA &amp; basis 0.28, yield 0.26, stables / payments / insurance / prediction 0.24, other 0.20, a bare chain 0.15. No name is ever special-cased — the same formula scores every row, from the snapshot's own figures only. An implied value is this entry's claim, not a prediction that a token will be issued, or when.</p>
+</section>
+
+<nav class="views">
+  <button id="view-board" class="active">Board</button>
+  <button id="view-live">Live tokens — already trading</button>
+</nav>
+
+<section class="controls" id="controls">
+  <input id="q" type="search" placeholder="Search name or slug…" aria-label="Search">
+  <select id="cat" aria-label="Category"><option value="">All categories</option></select>
+  <select id="chain" aria-label="Chain"><option value="">All chains</option></select>
+  <select id="sort" aria-label="Sort">
+    <option value="implied">Sort: implied value ↓</option>
+    <option value="tvl">Sort: TVL ↓</option>
+    <option value="growth">Sort: 7-day growth ↓</option>
+    <option value="age">Sort: oldest first</option>
+  </select>
+  <label class="check"><input type="checkbox" id="wl"> Watchlist only ($50M+ floor)</label>
+</section>
+
+<main>
+  <table id="board">
+    <thead><tr>
+      <th>#</th><th>Protocol</th><th>Category</th><th>Chains</th>
+      <th class="num">TVL</th><th class="num">7d</th><th class="num">Age</th><th class="num">Implied value</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <p class="count" id="count"></p>
+  <section id="detail" class="detail" hidden></section>
+</main>
+
+<footer>
+  <p>Snapshot: <span id="src"></span>. Floor $50,000,000. A protocol "records no token" when DefiLlama lists no market cap, CoinGecko id or symbol for it — that is the record, not proof it has none. Live-token protocols are shown at the market's own value and never enter the ranked board.</p>
+</footer>
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
