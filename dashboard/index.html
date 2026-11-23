@@ -18,18 +18,19 @@
 <section class="model" id="model-box">
   <h2>How the value is worked out — fitted, not guessed</h2>
   <p class="formula">implied value = fitted value × token odds &nbsp;·&nbsp; fitted value = exp(a<sub>category</sub> + 0.52 × ln TVL) × growth × chains</p>
-  <p id="fit-line">The line is fitted on this snapshot's own traded-token comparables (log market cap on log TVL, 128 protocols with a positive market cap; each category's intercept is its mean residual, shrunk n/(n+5)). Growth is the 7-day TVL change, clamped to −50%…+100% at weight 0.3 — the snapshot's own data says growth barely moves the residual (correlation −0.14), so the weight is small. Chains add 2% each, up to 10%. Token odds are the share of peer protocols in the same age bin that record a token, smoothed toward the overall share. No name is ever special-cased — the same fit scores every row, from the snapshot's own figures only. An implied value is this entry's claim, not a prediction that a token will be issued, or when.</p>
+  <p id="fit-line">The line is fitted on this snapshot's own traded-token comparables (log market cap on log TVL, 128 protocols with a positive market cap; a category's intercept is used only when the category has ≥3 comparables, and the shift from the pooled intercept is capped at ±0.5 log — the range guard). Growth is the 7-day TVL change, clamped to −50%…+100% at weight 0.3 — the snapshot's own data says growth barely moves the residual (correlation −0.14), so the weight is small. Chains add 2% each, up to 10%. Token odds are the share of peer protocols in the same age bin that record a token, smoothed toward the overall share. No name is ever special-cased — the same fit scores every row, from the snapshot's own figures only. An implied value is this entry's claim, not a prediction that a token will be issued, or when.</p>
 </section>
 
 <section class="model proof" id="proof-box">
   <h2>Proof strip — check the claims on this page</h2>
   <p id="proof-line"></p>
-  <p class="fine">Validation is measured inside the run, not asserted: leave-one-out refits the line without each live protocol in turn; walk-forward fits on the oldest 70% of live protocols by listed date and predicts the newest 30%. Both are scored against a flat median market-cap/TVL ratio. Farm $/hr assumes an active farmer captures 0.001% of the launch value, over 11 transactions and about 3 hours in 8 weeks — a relative score, never a payout promise. The detail view recomputes each row's fitted value live from the TVL and the coefficients shown, so the board and the code agree.</p>
+  <p class="fine">Validation is measured inside the run, not asserted: leave-one-out refits the line without each live protocol in turn; walk-forward fits on the oldest 70% of live protocols by listed date and predicts the newest 30%. Both are scored against a flat median market-cap/TVL ratio. Two rival models — one line per category, and a quadratic log-log curve — were fitted blind and tested on the same tests; neither beat the pooled line on leave-one-out by any robust margin, so the pooled line scores the board and the rivals are printed in the proof strip, not hidden. Every row carries a bootstrap band and a rank range over 200 refits of the comparables. Farm $/hr is costed at $100 / $1,000 / $10,000 deposits: expected value assumes a 5% airdrop pool and farmers collectively deploying 10% of TVL, minus gas and opportunity cost at a 5% annual (T-bill) rate — a relative score, never a payout promise. The detail view recomputes each row's fitted value live from the TVL and the fitted line using the row's own category intercept, so the board and the code agree, and its sandbox lets you move the assumptions and watch the row's numbers move.</p>
 </section>
 
 <nav class="views">
   <button id="view-board" class="active">Board</button>
   <button id="view-live">Live tokens — already trading</button>
+  <button id="view-comps">Comps — the 128 fitted on</button>
 </nav>
 
 <section class="controls" id="controls">
