@@ -42,16 +42,22 @@ function fail(message: string, code = 1): never {
 
 // --- File copying ---
 
+// Copy one regular file, reporting whether it was copied (dotfiles and
+// non-files are skipped by the caller, not here).
+function copyOneFile(from: string, name: string, to: string): boolean {
+  const path = join(from, name);
+  if (!statSync(path).isFile()) return false;
+  copyFileSync(path, join(to, name));
+  return true;
+}
+
 function copyFiles(from: string, to: string): string[] {
   if (!existsSync(from)) return [];
   mkdirSync(to, { recursive: true });
   const copied: string[] = [];
   for (const name of readdirSync(from)) {
     if (name.startsWith('.')) continue;
-    const path = join(from, name);
-    if (!statSync(path).isFile()) continue;
-    copyFileSync(path, join(to, name));
-    copied.push(name);
+    if (copyOneFile(from, name, to)) copied.push(name);
   }
   return copied;
 }
