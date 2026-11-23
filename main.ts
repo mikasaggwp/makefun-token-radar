@@ -1,10 +1,11 @@
-// Token Radar entry (Node 22, standard library only) — model "radar-2".
+// Token Radar entry (Node 22, standard library only) — model "radar-3".
 //
 // Reads the sealed snapshot from /input/snapshot.json (or --input <file|dir>),
-// scores every pre-token protocol with lib/radar.ts, writes the ranked board
-// to /output/board.json, writes the dashboard data to /output/data.js, copies
-// dashboard/ and screenshots/ to /output, and writes /output/dossier.json
-// with buildDossier from vendor/makefun-board.ts.
+// fits the value model on the snapshot's own traded-token comparables in
+// lib/radar.ts, writes the ranked board to /output/board.json, writes the
+// dashboard data to /output/data.js, copies dashboard/ and screenshots/ to
+// /output, and writes /output/dossier.json with buildDossier from
+// vendor/makefun-board.ts.
 //
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../kit/token-radar-01-kit/input/snapshot.json
@@ -82,8 +83,13 @@ for (const name of shots) {
 
 writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEXT_MAX_BYTES, screenshots: SCREENSHOT_CAPS, dashboard: { max_files: 400, max_bytes: 4_194_304 } }));
 
+const v = radar.validation;
+const verdicts = { FARM: board.filter((r) => r.farm.verdict === 'FARM').length, THIN: board.filter((r) => r.farm.verdict === 'THIN').length, SKIP: board.filter((r) => r.farm.verdict === 'SKIP').length };
 process.stdout.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.early_size} early, ${radar.live_size} live set aside)\n` +
+    `token radar: census ${radar.census.total} total = ${radar.census.ranked} ranked + ${radar.census.live} record a token + ${radar.census.excluded} pre-token excluded\n` +
+    `token radar: fit ln(mcap) = ${v.pooled_intercept} + ${v.pooled_slope} ln(TVL); LOO median abs log err ${v.loo_median_abs_log_err} vs flat ${v.loo_flat_median_abs_log_err} (x${v.loo_improvement}); walk-forward ${v.walk_median_abs_log_err} vs flat ${v.walk_flat_median_abs_log_err} (x${v.walk_improvement})\n` +
+    `token radar: verdicts FARM ${verdicts.FARM} / THIN ${verdicts.THIN} / SKIP ${verdicts.SKIP}\n` +
     `token radar: top 3: ${board.slice(0, 3).map((r) => `#${r.rank} ${r.name} $${r.implied_value_usd.toLocaleString('en-US')}`).join(', ')}\n` +
     `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (${dashFiles.length} files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n`,
 );
