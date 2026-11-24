@@ -20,14 +20,17 @@
     ].map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join('');
     $('src').textContent = `${D.source} — as of ${D.as_of}. Model ${D.model_version}.`;
     const v = D.validation;
-    $('proof-line').innerHTML = `<b>Fit:</b> ln(market cap) = ${v.pooled_intercept} + ${v.pooled_slope} × ln(TVL), fitted on ${v.loo_n} traded comparables, with a category intercept where the category has ≥3 comparables (shift capped at ±0.5 log). ` +
+    $('formula-line').innerHTML = `implied value = fitted value × token odds &nbsp;·&nbsp; fitted value = exp(${v.quad_a.toFixed(4)} + ${v.quad_b.toFixed(4)} × ln TVL + ${v.quad_c.toFixed(4)} × (ln TVL)<sup>2</sup>)`;
+    $('proof-line').innerHTML = `<b>Fit:</b> ln(market cap) = ${v.quad_a.toFixed(4)} + ${v.quad_b.toFixed(4)} × ln(TVL) + ${v.quad_c.toFixed(4)} × (ln TVL)<sup>2</sup>, fitted on ${v.loo_n} traded comparables — one quadratic curve for every protocol, no category term, no growth, no chain bonus. ` +
       `<b>Leave-one-out:</b> median abs log error ${v.loo_median_abs_log_err} vs flat-ratio ${v.loo_flat_median_abs_log_err} — <b>${v.loo_improvement}× better</b>. ` +
       `<b>Walk-forward</b> (${v.walk_n_train} train → ${v.walk_n_test} test): ${v.walk_median_abs_log_err} vs flat ${v.walk_flat_median_abs_log_err} — <b>${v.walk_improvement}× better</b>. ` +
-      `<b>Rivals, same tests:</b> per-category lines LOO ${v.percat_loo_median_abs_log_err}, walk ${v.percat_walk_median_abs_log_err}; quadratic LOO ${v.quad_loo_median_abs_log_err}, walk ${v.quad_walk_median_abs_log_err}; guarded intercept model LOO ${v.guard_loo_median_abs_log_err}, walk ${v.guard_walk_median_abs_log_err}. Neither rival beats the pooled line on leave-one-out by any robust margin, so the pooled line scores the board. ` +
-      `<b>Correction:</b> without the range guard, one comparable — Rain, a prediction market with $6.6M of TVL and a $2.65B market cap (400×) — tripled the whole prediction-market intercept and put Polymarket's fitted value at $86.7M. With the guard the category falls back to the pooled line: Polymarket fitted $29.2M, implied $19.4M, rank #5. ` +
+      `<b>Held-out:</b> newest 20% of dated comparables ${v.held_recent_median_abs_log_err} (n=${v.held_recent_n}); seeded 80/20 random split ${v.held_random_median_abs_log_err} (n=${v.held_random_n}). ` +
+      `<b>Rivals, same four tests (LOO / walk / held-recent / held-random):</b> pooled line ${v.pooled_loo_median_abs_log_err} / ${v.pooled_walk_median_abs_log_err} / ${v.pooled_held_recent_median_abs_log_err} / ${v.pooled_held_random_median_abs_log_err}; pooled + category-intercept guard ${v.guard_loo_median_abs_log_err} / ${v.guard_walk_median_abs_log_err} / ${v.guard_held_recent_median_abs_log_err} / ${v.guard_held_random_median_abs_log_err}; per-category lines ${v.percat_loo_median_abs_log_err} / ${v.percat_walk_median_abs_log_err} / ${v.percat_held_recent_median_abs_log_err} / ${v.percat_held_random_median_abs_log_err}; quadratic + guard ${v.quadguard_loo_median_abs_log_err} / ${v.quadguard_walk_median_abs_log_err} / ${v.quadguard_held_recent_median_abs_log_err} / ${v.quadguard_held_random_median_abs_log_err}. The plain quadratic wins the four-test average; the pooled line edges it on held-recent by 0.0013 and per-category lines win held-recent outright — the win is real but not a sweep. ` +
+      `<b>What was dropped, and why:</b> per-category curves (LOO 1.682, held-random 2.0838 — 1–15 comparables per category, the slopes are noise); growth (weight 0 wins all four tests; weight 0.3 is worse on all four); the chain bonus (LOO 1.2167 at 0 vs 1.2836 at 2% per chain; walk-forward 1.0382 vs 1.0788; held-recent ties at 1.4042; only the 25-row held-random split favours the bonus). ` +
+      `<b>Token odds:</b> 5-fold cross-validation over all 758 protocols — Brier ${v.odds_cv_brier}, log-loss ${v.odds_cv_logloss}, vs the age-bin-only model with the same corrected prior ${v.odds_v3_cv_brier} / ${v.odds_v3_cv_logloss} and vs radar-4 as shipped (wrong prior: 17% instead of 55%) ${v.odds_v3actual_cv_brier} / ${v.odds_v3actual_cv_logloss}. ` +
       `<b>Bootstrap (${v.bootstrap_b} resamples):</b> the median row's P10–P90 fitted band is ${v.bootstrap_median_rel_width}× its median fitted value, and its rank range is ${v.bootstrap_median_rank_width} places wide — a rank is a point estimate with a range, shown on every row. ` +
       `<b>Census:</b> all ${D.census.total} snapshot protocols accounted for — ${D.census.ranked} ranked, ${D.census.live} record a token, ${D.census.excluded} pre-token excluded (wrapped/staked/bridged/versioned). ` +
-      `<b>Verdicts (at a $1,000 deposit):</b> ${D.rows.filter((r) => r.verdict === 'FARM').length} FARM · ${D.rows.filter((r) => r.verdict === 'THIN').length} THIN · ${D.rows.filter((r) => r.verdict === 'SKIP').length} SKIP.`;
+      `<b>Verdicts (at a $1,000 deposit):</b> ${D.rows.filter((r) => r.verdict === 'FARM').length} FARM · ${D.rows.filter((r) => r.verdict === 'THIN').length} THIN · ${D.rows.filter((r) => r.verdict === 'SKIP').length} SKIP. ${D.rows.reduce((n, r) => n + (r.scenarios || []).filter((s) => s.breakeven_odds > 1).length, 0)} of ${D.rows.length * 3} deposit scenarios can never break even.</p>`;
   }
 
   function fillSelects() {
@@ -82,7 +85,7 @@
     }
     if (view === 'comps') {
       tb.innerHTML = D.comps.map((p) => `<tr><td>—</td><td><b>${esc(p.name)}</b><br><span style="color:var(--muted)">${esc(p.slug)}</span></td><td>${esc(p.category || '—')}</td><td>—</td><td class="num">${money(p.tvl_usd)}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">${money(p.mcap_usd)}</td></tr>`).join('');
-      $('count').textContent = `The ${D.comps.length} traded comparables the value line was fitted on — every one of them, with its TVL and market cap. A fitted value is only as good as these comps; the thinnest categories (1–2 comps) get no category intercept — see the range guard in the proof strip.`;
+      $('count').textContent = `The ${D.comps.length} traded comparables the value curve was fitted on — every one of them, with its TVL and market cap. A fitted value is only as good as these comps; the curve has no category term at all, because per-category curves were tested on the same four validation tests and lost (LOO 1.682, held-random 2.0838). Categories matter only through each row's token odds — see the detail view.`;
       $('detail').hidden = true;
       return;
     }
@@ -97,35 +100,33 @@
     if (!slug) { box.hidden = true; return; }
     const r = D.rows.find((x) => x.slug === slug);
     if (!r) { box.hidden = true; return; }
-    // Recomputed live in this page from the TVL and the fitted line, using
-    // the row's own category intercept — the same number the board used.
-    const recomputed = Math.exp(r.category_intercept + D.validation.pooled_slope * Math.log(Math.max(1, r.tvl_usd))) * r.growth_multiplier * r.chain_multiplier;
+    // Recomputed live in this page from the TVL and the fitted quadratic
+    // curve — the same number the board used.
+    const lnTvl = Math.log(Math.max(1, r.tvl_usd));
+    const recomputed = Math.exp(D.validation.quad_a + D.validation.quad_b * lnTvl + D.validation.quad_c * lnTvl * lnTvl);
     const base = r.fitted_value_usd;
-    const catNote = r.guard_applied
-      ? `Category evidence: ${r.category_n} traded comparable${r.category_n === 1 ? '' : 's'} in ${esc(r.category || 'Uncategorised')} — too few for a category intercept, so the pooled line is used (range guard).`
-      : `Category evidence: ${r.category_n} traded comparables in ${esc(r.category || 'Uncategorised')}, largest market cap ${r.category_max_mcap_usd ? money(r.category_max_mcap_usd) : '—'}; category intercept ${r.category_intercept.toFixed(2)} vs pooled ${D.validation.pooled_intercept}.`;
+    const catNote = `Token odds: ${(r.age_bin_odds * 100).toFixed(0)}% from the protocol's age bin (share of peer protocols in that bin that record a token, smoothed toward the overall share) blended with the ${esc(r.category || 'Uncategorised')} category token rate ${(r.category_token_rate * 100).toFixed(0)}% (share of ${r.category_n} peers in that category that record a token, shrunk toward the age-bin rate) — blended odds ${(r.token_odds * 100).toFixed(0)}%. Categories affect only the odds, never the fitted value.`;
     box.innerHTML = `<h2>#${r.rank} ${esc(r.name)} <span class="verdict ${r.verdict.toLowerCase()}">${r.verdict}</span></h2>
       <p class="meta">${esc(r.category || 'Uncategorised')} · ${esc(r.chains.join(', ') || 'no chain listed')} · listed ${esc(r.listed_at || 'unknown')} · records no token (no market cap, no CoinGecko id, no symbol).</p>
       <div class="breakdown">
         <div><b>${money(r.tvl_usd)}</b><span>TVL</span></div>
-        <div><b>${money(base)}</b><span>fitted value (category fit × growth × chains)</span></div>
+        <div><b>${money(base)}</b><span>fitted value (quadratic curve on TVL)</span></div>
         <div><b>${money(r.fitted_lo_usd)}–${money(r.fitted_hi_usd)}</b><span>fitted P10–P90 over 200 refits</span></div>
-        <div><b>${(r.token_odds * 100).toFixed(0)}%</b><span>token odds (age-bin peers)</span></div>
+        <div><b>${(r.token_odds * 100).toFixed(0)}%</b><span>token odds (age bin + category rate)</span></div>
         <div><b>${money(r.implied_value_usd)}</b><span>implied value = fitted × odds</span></div>
         <div><b>${money(r.implied_lo_usd)}–${money(r.implied_hi_usd)}</b><span>implied P10–P90</span></div>
         <div><b>#${r.rank_lo}–${r.rank_hi}</b><span>rank range over 200 refits</span></div>
         <div><b>$${r.net_per_hour_usd.toFixed(2)}/hr</b><span>net farm $/hr at $1,000 (after $${r.gas_usd.toFixed(2)} gas, ${r.hours} hrs)</span></div>
       </div>
-      <p class="meta">Model panel — fitted = exp(${r.category_intercept.toFixed(2)} + ${D.validation.pooled_slope} × ln TVL) × growth ×${r.growth_multiplier.toFixed(2)} (7d ${pct(r.change_7d)}) × chains ×${r.chain_multiplier.toFixed(2)} (${r.chains.length} chains). Recomputed live in this page from the TVL and the fitted line: fitted ≈ ${money(Math.round(recomputed))} — within rounding of the board's ${money(base)}, because the recompute uses the row's category intercept. ${catNote}</p>
+      <p class="meta">Model panel — fitted = exp(${D.validation.quad_a.toFixed(4)} + ${D.validation.quad_b.toFixed(4)} × ln TVL + ${D.validation.quad_c.toFixed(4)} × (ln TVL)<sup>2</sup>), with ln TVL = ${lnTvl.toFixed(2)} for this protocol's $${Math.round(r.tvl_usd / 1e6)}M TVL. No growth term, no chain bonus, no category term — all three were tested on the same four validation tests and dropped (see the proof strip). Recomputed live in this page from the TVL and the fitted curve: fitted ≈ ${money(Math.round(recomputed))} — within rounding of the board's ${money(base)}. ${catNote}</p>
       <h3>Deposit scenarios — what your size changes</h3>
       <table class="scen"><thead><tr><th>Deposit</th><th class="num">Expected value</th><th class="num">Opportunity cost (5% T-bill rate, 8 wks)</th><th class="num">Net $/hr</th><th class="num">Break-even launch odds</th><th class="num">Verdict</th></tr></thead><tbody>
       ${(r.scenarios || []).map((s) => `<tr><td>$${s.deposit_usd.toLocaleString('en-US')}</td><td class="num">$${s.expected_value_usd.toFixed(2)}</td><td class="num">$${s.opportunity_cost_usd.toFixed(2)}</td><td class="num ${s.net_per_hour_usd >= 0 ? 'up' : 'down'}">$${s.net_per_hour_usd.toFixed(2)}</td><td class="num">${s.breakeven_odds > 1 ? '>100% (never)' : (s.breakeven_odds * 100).toFixed(0) + '%'}</td><td class="num"><span class="verdict ${s.verdict.toLowerCase()}">${s.verdict}</span></td></tr>`).join('')}
       </tbody></table>
-      <p class="meta">Assumptions, all stated: airdrop pool 5% of launch value; farmers collectively deploy 10% of TVL, so a deposit's share of the pool is deposit ÷ (10% of TVL); gas $${r.gas_usd.toFixed(2)} over 11 transactions; ${r.hours} hours of the farmer's time over 8 weeks; opportunity cost at a 5% annual rate — the T-bill rate — on the deposit while it sits in the position. Break-even launch odds are the token odds at which the deposit's expected value exactly covers its gas + opportunity cost; the row's actual odds are ${(r.token_odds * 100).toFixed(0)}%. None of this is a payout promise.</p>
+      <p class="meta">Assumptions, all stated: airdrop pool 5% of launch value; farmers collectively deploy 10% of TVL, so a deposit's share of the pool is deposit ÷ (10% of TVL), capped at 25% of the pool — one farmer cannot be credited with most of a public pool; gas $${r.gas_usd.toFixed(2)} over 11 transactions; ${r.hours} hours of the farmer's time over 8 weeks; opportunity cost at a 5% annual rate — the T-bill rate — on the deposit while it sits in the position. Break-even launch odds are the token odds at which the deposit's expected value exactly covers its gas + opportunity cost; the row's actual odds are ${(r.token_odds * 100).toFixed(0)}%. A scenario marked ">100% (never)" can never break even at any launch odds. None of this is a payout promise.</p>
       <h3>Model sandbox — test the assumptions yourself</h3>
       <div class="sandbox">
-        <label>Growth weight <input type="range" id="sb-gw" min="0" max="0.6" step="0.05" value="0.3"> <span id="sb-gw-v">0.30</span></label>
-        <label>Chain bonus per chain <input type="range" id="sb-cb" min="0" max="0.05" step="0.005" value="0.02"> <span id="sb-cb-v">2.0%</span></label>
+        <label>Token odds <input type="range" id="sb-odds" min="0" max="1" step="0.01" value="${r.token_odds.toFixed(2)}"> <span id="sb-odds-v">${(r.token_odds * 100).toFixed(0)}%</span></label>
         <label>Airdrop pool share <input type="range" id="sb-pool" min="0.01" max="0.1" step="0.01" value="0.05"> <span id="sb-pool-v">5%</span></label>
         <label>Farmers' share of TVL <input type="range" id="sb-cap" min="0.05" max="0.2" step="0.01" value="0.1"> <span id="sb-cap-v">10%</span></label>
         <p id="sb-out" class="meta"></p>
@@ -135,24 +136,22 @@
       <p class="meta">The implied value is this entry's claim from the snapshot's own figures. It is not a promise that ${esc(r.name)} will issue a token, or when.</p>`;
     box.hidden = false;
     const recomputeSandbox = () => {
-      const gw = parseFloat($('sb-gw').value);
-      const cb = parseFloat($('sb-cb').value);
+      const odds = parseFloat($('sb-odds').value);
       const pool = parseFloat($('sb-pool').value);
       const cap = parseFloat($('sb-cap').value);
-      $('sb-gw-v').textContent = gw.toFixed(2);
-      $('sb-cb-v').textContent = (cb * 100).toFixed(1) + '%';
+      $('sb-odds-v').textContent = (odds * 100).toFixed(0) + '%';
       $('sb-pool-v').textContent = (pool * 100).toFixed(0) + '%';
       $('sb-cap-v').textContent = (cap * 100).toFixed(0) + '%';
-      const growthPct = Math.min(100, Math.max(-50, r.change_7d ?? 0));
-      const gm = 1 + (growthPct / 100) * gw;
-      const cm = Math.min(1.1, 1 + cb * Math.max(r.chains.length - 1, 0));
-      const fitted = Math.exp(r.category_intercept + D.validation.pooled_slope * Math.log(Math.max(1, r.tvl_usd))) * gm * cm;
-      const implied = fitted * r.token_odds;
-      const expected = implied * pool * 1000 / (cap * r.tvl_usd);
+      // Same fitted value as the board: the quadratic curve on TVL only.
+      // No growth weight and no chain bonus — both were tested and dropped.
+      const fitted = recomputed;
+      const implied = fitted * odds;
+      const share = Math.min(0.25, 1000 / (cap * r.tvl_usd));
+      const expected = implied * pool * share;
       const net = (expected - r.gas_usd - 1000 * 0.05 * (8 / 52)) / r.hours;
-      $('sb-out').textContent = `With your settings: fitted ${money(Math.round(fitted))}, implied ${money(Math.round(implied))}, and at a $1,000 deposit the expected value is $${expected.toFixed(2)} — net $${net.toFixed(2)}/hr. The board's own numbers use growth weight 0.30, chain bonus 2%, pool 5%, farmers' share 10%.`;
+      $('sb-out').textContent = `With your settings: fitted ${money(Math.round(fitted))}, implied ${money(Math.round(implied))}, and at a $1,000 deposit the expected value is $${expected.toFixed(2)} — net $${net.toFixed(2)}/hr. The board's own numbers use token odds ${(r.token_odds * 100).toFixed(0)}%, pool 5%, farmers' share 10%, and cap one farmer's share of the pool at 25%.`;
     };
-    ['sb-gw', 'sb-cb', 'sb-pool', 'sb-cap'].forEach((id) => $(id).addEventListener('input', recomputeSandbox));
+    ['sb-odds', 'sb-pool', 'sb-cap'].forEach((id) => $(id).addEventListener('input', recomputeSandbox));
     recomputeSandbox();
     box.scrollIntoView({ block: 'nearest' });
   }
